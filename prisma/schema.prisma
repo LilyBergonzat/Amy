@@ -1,0 +1,109 @@
+generator client {
+    provider = "prisma-client"
+    output   = "../src/generated/prisma"
+}
+
+datasource db {
+    provider = "mysql"
+}
+
+model Setting {
+    key   String @id @db.VarChar(255)
+    value String @db.Text
+
+    @@map("setting")
+}
+
+enum ThreadOpen {
+    OPEN
+}
+
+model Thread {
+    id             String      @default(cuid())
+    idOpenedBy     String
+    openedByData   String      @db.Text
+    openedByUser   Boolean
+    idRecipient    String
+    recipientData  String      @db.Text
+    isOpen         ThreadOpen?
+    idChannel      String?
+    scheduledClose DateTime?
+    openedAt       DateTime    @default(now())
+    closedAt       DateTime?
+
+    messages ThreadMessage[]
+
+    @@id(id)
+    @@unique([idRecipient, isOpen])
+    @@unique([idChannel])
+    @@index([idChannel])
+    @@map("thread")
+}
+
+model ThreadMessage {
+    id                   String   @default(cuid())
+    idMessage            String?
+    idThread             String
+    idStaff              String?
+    idTransferredMessage String?
+    senderData           String   @db.Text
+    messageData          String?  @db.Text
+    contents             String   @db.Text
+    stickersData         String?  @db.Text
+    mentionsData         String?  @db.Text
+    internal             Boolean
+    anonymous            Boolean?
+    forwarded            Boolean  @default(false)
+    createdAt            DateTime @default(now())
+
+    thread      Thread             @relation(fields: [idThread], references: [id], onDelete: Cascade)
+    attachments ThreadAttachment[]
+
+    @@id(id)
+    @@map("thread_message")
+}
+
+model ThreadAttachment {
+    id              String
+    idThreadMessage String
+    name            String
+    contentType     String?
+    size            Int
+    width           Int?
+    height          Int?
+    spoiler         Boolean
+    description     String? @db.Text
+
+    message ThreadMessage @relation(fields: [idThreadMessage], references: [id], onDelete: Cascade)
+
+    @@id(id)
+    @@map("thread_attachment")
+}
+
+model Snippet {
+    id        Int            @default(autoincrement())
+    content   String         @db.Text
+    createdAt DateTime       @default(now())
+    aliases   SnippetAlias[]
+
+    @@id(id)
+    @@map("snippet")
+}
+
+enum SnippetAliasPrimary {
+    PRIMARY
+}
+
+model SnippetAlias {
+    id        Int                  @default(autoincrement())
+    idSnippet Int
+    alias     String
+    isPrimary SnippetAliasPrimary?
+
+    snippet Snippet @relation(fields: [idSnippet], references: [id], onDelete: Cascade)
+
+    @@id(id)
+    @@unique([alias])
+    @@unique([idSnippet, isPrimary])
+    @@map("snippet_alias")
+}
