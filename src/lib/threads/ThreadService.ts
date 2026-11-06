@@ -232,7 +232,9 @@ export class ThreadService {
             return null;
         }
 
-        return await this.saveUserMessage(thread, message, transferredMessage);
+        await this.saveUserMessage(thread, message, transferredMessage);
+
+        return transferredMessage;
     }
 
     public async sendMessageFromStaff(

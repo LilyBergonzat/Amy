@@ -1,4 +1,4 @@
-import type { Message } from 'discord.js';
+import { type Message, MessageReferenceType } from 'discord.js';
 import { container } from '@sapphire/framework';
 import { MessageFlags } from 'discord-api-types/v10';
 
@@ -81,9 +81,38 @@ export class MessageRelayService {
         if (reaction) {
             await message.react(reaction);
         }
+
+        await this.highlightSnowflakes(message, transferredMessage);
     }
 
     private async shouldDMBeRelayed(message: Message) {
         return !message.author.bot; // @TODO create a proper condition
+    }
+
+    private async highlightSnowflakes(message: Message, transferredMessage: Message) {
+        const content = message.reference?.type === MessageReferenceType.Forward
+            ? message.messageSnapshots.first()?.content
+            : message.content;
+
+        if (!content) {
+            return;
+        }
+
+        const regex = /(?<snowflake>\d{17,19})/gv;
+        const snowflakes = new Set<string>();
+        let matches;
+
+        do {
+            matches = regex.exec(content);
+            matches?.groups?.snowflake && snowflakes.add(matches.groups.snowflake);
+        } while (matches);
+
+        if (snowflakes.size < 1) {
+            return;
+        }
+
+        await transferredMessage.reply(
+            `-# IDs in this message:\n${[...snowflakes].map(s => `-# - \`${s}\``).join('\n')}`
+        );
     }
 }
