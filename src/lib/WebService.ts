@@ -1,21 +1,56 @@
 import { type Context, Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { serve, type ServerType } from '@hono/node-server';
 import { trimTrailingSlash } from 'hono/trailing-slash';
 import { discordAuth } from '@hono/oauth-providers/discord';
-import { postDiscordAuthMiddleware, discordLoggedInMiddleware } from '../web/middlewares/discord.js';
+import { postDiscordAuthMiddleware, discordLoggedInMiddleware, discordLogout } from '../web/middlewares/discord.js';
 import { TranscriptService } from './threads/TranscriptService.js';
 import { Transcript } from '../web/views/Transcript.js';
-import { NotFound } from '../web/views/NotFound.js';
 import { container } from '@sapphire/framework';
 import { openAsBlob } from 'node:fs';
 import { isGalleryMedia } from './utils/discord.js';
 import * as fs from 'node:fs';
+import { Forbidden, InternalServerError, NotFound, ServiceUnavailable, Unauthorized } from '../web/views/Error.js';
+import { MINUTE, SECOND, YEAR } from './utils/datetime.js';
+import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie';
 
-export const respondUnauthorized = (c: Context) => c.text('Unauthorized', 401);
-export const respondForbidden = (c: Context) => c.text('Forbidden', 403);
+export const setCookie = (c: Context, name: string, value: string, options?: Parameters<typeof setSignedCookie>[4]) => {
+    return setSignedCookie(c, name, value, process.env.SECRET, {
+        maxAge: YEAR / SECOND,
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: process.env.WEB_BASE_URL.startsWith('https'),
+        ...options,
+    });
+};
+
+export const getCookie = (c: Context, name: string) => {
+    return getSignedCookie(c, process.env.SECRET, name);
+};
+
+export const setGoBackToCookie = (c: Context) => {
+    const url = new URL(c.req.url);
+    return setCookie(c, 'go-back-to', `${url.pathname}${url.search}`, { maxAge: (10 * MINUTE) / SECOND });
+};
+
+export const redirectToGoBackTo = async (c: Context) => {
+    const redirectTo = await getCookie(c, 'go-back-to');
+
+    if (redirectTo) {
+        deleteCookie(c, 'go-back-to');
+    }
+
+    return c.redirect(redirectTo || '/');
+};
+
+export const respondUnauthorized = (c: Context) => c.html(Unauthorized(), 401);
+export const respondForbidden = async (c: Context) => {
+    await setGoBackToCookie(c);
+    return c.html(Forbidden(), 403);
+};
 export const respondNotFound = (c: Context) => c.notFound();
-export const respondUnavailable = (c: Context) => c.text('Service unavailable', 503);
+export const respondUnavailable = (c: Context) => c.html(ServiceUnavailable(), 503);
 
 export class WebService {
     private static instance: WebService;
@@ -76,6 +111,7 @@ export class WebService {
             }),
             postDiscordAuthMiddleware,
         );
+        this.app.use('/logout', discordLogout);
     }
 
     private configureRoutes() {
@@ -114,11 +150,20 @@ export class WebService {
             });
         });
 
-        this.app.get('/', (c) => c.text('Hello world!'));
-
         this.app.notFound((c) => {
             c.status(404);
             return c.html(NotFound());
+        });
+
+        this.app.onError((error, c) => {
+            if (error instanceof HTTPException) {
+                return error.status === 401 ? respondUnauthorized(c) : error.getResponse();
+            }
+
+            container.logger.error(error);
+            c.status(500);
+
+            return c.html(InternalServerError());
         });
     }
 }

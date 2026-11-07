@@ -1,28 +1,20 @@
 import { type Context, type Next } from 'hono';
-import { getSignedCookie, setSignedCookie, deleteCookie } from 'hono/cookie';
+import { deleteCookie } from 'hono/cookie';
 import { container } from '@sapphire/framework';
 import { PermissionFlagsBits } from 'discord-api-types/v10';
-import { MINUTE, SECOND, YEAR } from '../../lib/utils/datetime.js';
-import { respondForbidden, respondUnauthorized, respondUnavailable } from '../../lib/WebService.js';
-
-const setCookie = (c: Context, name: string, value: string, options?: Parameters<typeof setSignedCookie>[4]) => {
-    return setSignedCookie(c, name, value, process.env.SECRET, {
-        maxAge: YEAR / SECOND,
-        httpOnly: true,
-        sameSite: 'Lax',
-        secure: process.env.WEB_BASE_URL.startsWith('https'),
-        ...options,
-    });
-};
-
-const getCookie = (c: Context, name: string) => {
-    return getSignedCookie(c, process.env.SECRET, name);
-};
+import { SECOND, YEAR } from '../../lib/utils/datetime.js';
+import {
+    getCookie,
+    redirectToGoBackTo,
+    respondForbidden,
+    respondUnauthorized,
+    respondUnavailable,
+    setCookie,
+    setGoBackToCookie,
+} from '../../lib/WebService.js';
 
 const redirectToDiscordAuth = async (c: Context) => {
-    const url = new URL(c.req.url);
-    await setCookie(c, 'go-back-to', `${url.pathname}${url.search}`, { maxAge: (10 * MINUTE) / SECOND });
-
+    await setGoBackToCookie(c);
     return c.redirect('/discord-redirect');
 };
 
@@ -35,13 +27,7 @@ export const postDiscordAuthMiddleware = async (c: Context) => {
 
     await setCookie(c, 'discord_user', user.id, { maxAge: YEAR / SECOND });
 
-    const redirectTo = await getCookie(c, 'go-back-to');
-
-    if (redirectTo) {
-        deleteCookie(c, 'go-back-to');
-    }
-
-    return c.redirect(redirectTo || '/');
+    return redirectToGoBackTo(c);
 };
 
 export const discordLoggedInMiddleware = async (c: Context, next: Next) => {
@@ -70,4 +56,9 @@ export const discordLoggedInMiddleware = async (c: Context, next: Next) => {
     }
 
     return next();
+};
+
+export const discordLogout = async (c: Context) => {
+    deleteCookie(c, 'discord_user');
+    return redirectToGoBackTo(c);
 };

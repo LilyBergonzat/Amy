@@ -1,7 +1,7 @@
 const dialog = document.getElementById('lightbox');
-const image = dialog.querySelector('.lightbox-image');
-const original = dialog.querySelector('.lightbox-original');
-const counter = dialog.querySelector('.lightbox-counter');
+const image = dialog?.querySelector('.lightbox-image');
+const original = dialog?.querySelector('.lightbox-original');
+const counter = dialog?.querySelector('.lightbox-counter');
 let items = [];
 let index = 0;
 
@@ -45,7 +45,7 @@ document.addEventListener('click', (event) => {
     dialog.showModal();
 });
 
-dialog.addEventListener('click', (event) => {
+dialog?.addEventListener('click', (event) => {
     if (event.target.closest('.lightbox-reveal')) {
         items[index].classList.add('revealed');
         dialog.classList.remove('concealed');
@@ -58,7 +58,7 @@ dialog.addEventListener('click', (event) => {
     }
 });
 
-dialog.addEventListener('keydown', (event) => {
+dialog?.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowLeft') {
         show(index - 1);
     } else if (event.key === 'ArrowRight') {
@@ -66,4 +66,4 @@ dialog.addEventListener('keydown', (event) => {
     }
 });
 
-dialog.addEventListener('close', () => image.removeAttribute('src'));
+dialog?.addEventListener('close', () => image.removeAttribute('src'));

@@ -14,7 +14,6 @@ declare global {
     }
 }
 
-// Runs inside the page, no closures allowed
 const renderFrames = (animationData: object, step: number) => {
     const anim = window.lottie.loadAnimation<'canvas'>({
         container: document.getElementById('w')!,
