@@ -76,7 +76,7 @@ model ThreadAttachment {
 
     message ThreadMessage @relation(fields: [idThreadMessage], references: [id], onDelete: Cascade)
 
-    @@id(id)
+    @@id([id, idThreadMessage])
     @@map("thread_attachment")
 }
 

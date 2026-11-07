@@ -98,7 +98,7 @@ export class ThreadPostService {
                     .addSeparatorComponents([
                         new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
                     ])
-                    .addTextDisplayComponents([new TextDisplayBuilder().setContent(contents ?? '')]),
+                    .addTextDisplayComponents(contents ? [new TextDisplayBuilder().setContent(contents)] : []),
                 ...(media.length > 0 ?
                     [
                         new MediaGalleryBuilder().addItems(

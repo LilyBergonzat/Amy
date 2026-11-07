@@ -215,7 +215,7 @@ export class ThreadService {
                 idTransferredMessage: transferredMessage.id,
                 messageData: message ? JSON.stringify(message.toJSON()) : null,
                 senderData: JSON.stringify(await computeUserData(staff)),
-                contents: '',
+                contents: contents ?? '',
                 stickersData: message ? JSON.stringify(await buildStickersData(message)) : undefined,
                 mentionsData: JSON.stringify(await buildMentionsData(contents)),
                 ...(message ? await this.getAttachmentData(thread.id, [...message.attachments.values()]) : {}),

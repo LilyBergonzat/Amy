@@ -93,14 +93,14 @@ export class WebService {
         this.app.get('/thread/:id/attachment/:attachmentId', async (c) => {
             const id = c.req.param('id');
             const attachmentId = c.req.param('attachmentId');
-            const threadAttachment = await container.prisma.threadAttachment.findUnique({
-                where: { id: attachmentId },
+            const threadAttachment = await container.prisma.threadAttachment.findFirst({
+                where: { id: attachmentId, message: { idThread: id } },
                 include: { message: true },
             });
 
             const path = `data/attachments/${threadAttachment?.message.idThread}/${threadAttachment?.id}`;
 
-            if (!threadAttachment || threadAttachment.message.idThread !== id || !fs.existsSync(path)) {
+            if (!threadAttachment || !fs.existsSync(path)) {
                 return respondNotFound(c);
             }
 

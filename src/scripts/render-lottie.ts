@@ -16,20 +16,22 @@ declare global {
 
 // Runs inside the page, no closures allowed
 const renderFrames = (animationData: object, step: number) => {
-    const canvas = document.getElementById('c') as HTMLCanvasElement;
     const anim = window.lottie.loadAnimation<'canvas'>({
-        container: document.body,
+        container: document.getElementById('w')!,
         renderer: 'canvas',
         loop: false,
         autoplay: false,
         animationData,
-        rendererSettings: { context: canvas.getContext('2d')!, clearCanvas: true },
+        rendererSettings: { clearCanvas: true },
     });
+    const canvas = document.querySelector<HTMLCanvasElement>('#w canvas')!;
     const frames: string[] = [];
+
     for (let f = 0; f < anim.totalFrames; f += step) {
         anim.goToAndStop(f, true);
         frames.push(canvas.toDataURL('image/png'));
     }
+
     const delay = Math.round((1000 / anim.frameRate) * step);
     anim.destroy();
 
@@ -38,7 +40,8 @@ const renderFrames = (animationData: object, step: number) => {
 
 const browser = await puppeteer.launch();
 const page = await browser.newPage();
-await page.setContent(`<canvas id="c" width="${SIZE}" height="${SIZE}"></canvas>`);
+
+await page.setContent(`<div id="w" style="width:${SIZE}px;height:${SIZE}px"></div>`);
 await page.addScriptTag({ path: lottiePath });
 await mkdir('assets/stickers', { recursive: true });
 
@@ -48,7 +51,7 @@ for (const file of (await readdir('assets/stickers-src')).filter((f) => f.endsWi
     const buffers = frames.map((dataUrl) => Buffer.from(dataUrl.split(',')[1], 'base64'));
 
     await sharp(buffers, { join: { animated: true } })
-        .webp({ loop: 0, delay })
+        .webp({ loop: 0, delay: frames.map(() => delay) })
         .toFile(`assets/stickers/${file.replace('.json', '.webp')}`);
 }
 

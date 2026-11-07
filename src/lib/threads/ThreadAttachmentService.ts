@@ -5,9 +5,16 @@ import { Readable } from 'node:stream';
 import { ReadableStream } from 'node:stream/web';
 import { createWriteStream } from 'node:fs';
 import path from 'node:path';
+import fs from 'node:fs';
 
 export async function saveAttachment(threadId: string, attachment: Attachment) {
     const dirPath = `./data/attachments/${threadId}`;
+    const filePath = path.join(dirPath, attachment.id);
+
+    if (fs.existsSync(filePath)) {
+        return;
+    }
+
     const response = await fetch(attachment.url);
     const body = response.body;
 
@@ -16,7 +23,7 @@ export async function saveAttachment(threadId: string, attachment: Attachment) {
     }
 
     await mkdir(dirPath, { recursive: true });
-    await pipeline(Readable.fromWeb(body as ReadableStream), createWriteStream(path.join(dirPath, attachment.id)));
+    await pipeline(Readable.fromWeb(body as ReadableStream), createWriteStream(filePath));
 
     return {
         id: attachment.id,
