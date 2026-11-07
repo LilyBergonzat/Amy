@@ -10,9 +10,19 @@ import fs from 'node:fs';
 export async function saveAttachment(threadId: string, attachment: Attachment) {
     const dirPath = `./data/attachments/${threadId}`;
     const filePath = path.join(dirPath, attachment.id);
+    const metadata = {
+        id: attachment.id,
+        name: attachment.name,
+        contentType: attachment.contentType,
+        size: attachment.size,
+        width: attachment.width,
+        height: attachment.height,
+        spoiler: attachment.spoiler,
+        description: attachment.description,
+    };
 
     if (fs.existsSync(filePath)) {
-        return;
+        return metadata;
     }
 
     const response = await fetch(attachment.url);
@@ -25,16 +35,7 @@ export async function saveAttachment(threadId: string, attachment: Attachment) {
     await mkdir(dirPath, { recursive: true });
     await pipeline(Readable.fromWeb(body as ReadableStream), createWriteStream(filePath));
 
-    return {
-        id: attachment.id,
-        name: attachment.name,
-        contentType: attachment.contentType,
-        size: attachment.size,
-        width: attachment.width,
-        height: attachment.height,
-        spoiler: attachment.spoiler,
-        description: attachment.description,
-    };
+    return metadata;
 }
 
 export async function buildStickersData(message: Message | MessageSnapshot | null | undefined) {
