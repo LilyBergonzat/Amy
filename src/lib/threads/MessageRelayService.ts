@@ -99,7 +99,7 @@ export class MessageRelayService {
             return;
         }
 
-        const regex = /(?<snowflake>\d{17,19})/gv;
+        const regex = /(?<!\d)(?<snowflake>\d{17,20})(?!\d)/gv;
         const snowflakes = new Set<string>();
         let matches;
 

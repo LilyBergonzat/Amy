@@ -6,9 +6,8 @@ import { getCommandName } from '../lib/CommandService.js';
 
 @ApplyOptions<Command.Options>({
     description: '(In a thread) Get the ID of the recipient member',
-    aliases: [],
 })
-export class LinkCommand extends Command {
+export class IdCommand extends Command {
     public override async chatInputRun(interaction: Command.ChatInputCommandInteraction) {
         await interaction.deferReply();
 
