@@ -23,6 +23,7 @@ import {
     type StickerMedia,
     stickerMedia,
 } from '../utils/discord.js';
+import type { Optional } from '@prisma/client/runtime/client';
 
 export class ThreadPostService {
     private static instance: ThreadPostService;
@@ -184,8 +185,12 @@ export class ThreadPostService {
             (sticker) => sticker !== null,
         );
 
+        const messageData: Optional<Message> = Object.assign({}, message);
+
+        delete messageData.nonce;
+
         return webhook.send({
-            ...message,
+            ...messageData,
             files: [
                 ...message.attachments.values(),
                 ...stickers.map((stickerMedia) =>

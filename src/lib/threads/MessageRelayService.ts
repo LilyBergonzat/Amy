@@ -15,9 +15,9 @@ export class MessageRelayService {
 
     public async messageCreateHandler(message: Message) {
         if (message.guild) {
-            void this.guildMessageCreateHandler(message);
+            await this.guildMessageCreateHandler(message);
         } else {
-            void this.directMessageCreateHandler(message);
+            await this.directMessageCreateHandler(message);
         }
     }
 
@@ -90,9 +90,10 @@ export class MessageRelayService {
     }
 
     private async highlightSnowflakes(message: Message, transferredMessage: Message) {
-        const content = message.reference?.type === MessageReferenceType.Forward
-            ? message.messageSnapshots.first()?.content
-            : message.content;
+        const content =
+            message.reference?.type === MessageReferenceType.Forward ?
+                message.messageSnapshots.first()?.content
+            :   message.content;
 
         if (!content) {
             return;
@@ -112,7 +113,7 @@ export class MessageRelayService {
         }
 
         await transferredMessage.reply(
-            `-# IDs in this message:\n${[...snowflakes].map(s => `-# - \`${s}\``).join('\n')}`
+            `-# IDs in this message:\n${[...snowflakes].map((s) => `-# - \`${s}\``).join('\n')}`,
         );
     }
 }
