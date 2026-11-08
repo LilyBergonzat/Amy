@@ -61,7 +61,7 @@ export async function buildMentionsData(content: string | null | undefined): Pro
         role: {
             regex: /<@&(?<id>\d{17,19})>/gv,
             buildData: async (id) => {
-                const role = await guild.roles.fetch(id);
+                const role = await guild.roles.fetch(id).catch(() => null);
 
                 if (!role) {
                     return null;
@@ -73,7 +73,7 @@ export async function buildMentionsData(content: string | null | undefined): Pro
         channel: {
             regex: /<#(?<id>\d{17,19})>/gv,
             buildData: async (id) => {
-                const channel = await guild.channels.fetch(id);
+                const channel = await guild.channels.fetch(id).catch(() => null);
 
                 if (!channel) {
                     return null;

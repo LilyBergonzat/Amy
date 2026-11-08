@@ -24,7 +24,7 @@ export async function Transcript({ service }: Props) {
                                 {thread.openedByUser ?
                                     'user'
                                 :   <>
-                                        staff <span class="font-bold">{thread.openedBy.name}</span>
+                                        staff {thread.openedBy && <span class="font-bold">{thread.openedBy.name}</span>}
                                     </>
                                 }{' '}
                                 on{' '}
@@ -184,17 +184,18 @@ export async function Transcript({ service }: Props) {
                 <div class="lightbox-stage">
                     <figure class="lightbox-frame">
                         <img class="lightbox-image" alt="" />
+                        <video class="lightbox-video" controls />
                         <button type="button" class="lightbox-reveal" aria-label="Reveal spoiler">
                             <span class="spoiler-badge">Spoiler</span>
                         </button>
                     </figure>
                 </div>
-                <button type="button" class="lightbox-nav lightbox-prev" aria-label="Previous image">
+                <button type="button" class="lightbox-nav lightbox-prev" aria-label="Previous">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M15 6l-6 6 6 6" />
                     </svg>
                 </button>
-                <button type="button" class="lightbox-nav lightbox-next" aria-label="Next image">
+                <button type="button" class="lightbox-nav lightbox-next" aria-label="Next">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M9 6l6 6-6 6" />
                     </svg>

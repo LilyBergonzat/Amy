@@ -1,4 +1,3 @@
-// scripts/render-apng.ts
 import { readdir, readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import UPNG from 'upng-js';

@@ -28,14 +28,14 @@ export type UserData = {
     username: string;
     globalName: string;
     discriminator: string;
-    avatar: string;
+    avatar: string | null;
     banner: null;
     accentColor: null;
     avatarDecoration: null;
     avatarDecorationData: {
         asset: string;
         skuId: string;
-    };
+    } | null;
     collectibles: {
         nameplate: {
             skuId: string;
@@ -43,20 +43,20 @@ export type UserData = {
             label: string;
             palette: string;
         };
-    };
+    } | null;
     primaryGuild: {
         identityGuildId: string;
         identityEnabled: boolean;
         tag: string;
         badge: string;
-    };
+    } | null;
     createdTimestamp: number;
     defaultAvatarURL: string;
     hexAccentColor: null;
-    tag: string;
+    tag: string | null;
     avatarURL: string;
     bannerURL: null;
-    guildTagBadgeURL: string;
+    guildTagBadgeURL: string | null;
     displayName: string;
     displayAvatarURL: string;
     displayAvatarURLAnimated: string;

@@ -1,5 +1,10 @@
 const dialog = document.getElementById('lightbox');
+
+/** @type {HTMLImageElement} */
 const image = dialog?.querySelector('.lightbox-image');
+
+/** @type {HTMLVideoElement} */
+const video = dialog?.querySelector('.lightbox-video');
 const original = dialog?.querySelector('.lightbox-original');
 const counter = dialog?.querySelector('.lightbox-counter');
 let items = [];
@@ -9,10 +14,23 @@ function show(target) {
     index = (target + items.length) % items.length;
 
     const link = items[index];
+    const hasImage = Boolean(link.querySelector('img'));
 
-    image.src = link.href;
-    image.alt = link.querySelector('img')?.alt ?? '';
-    original.href = link.href;
+    if (hasImage) {
+        video.pause();
+        video.removeAttribute('src');
+        video.style.display = 'none';
+        image.style.display = '';
+        image.src = link.href;
+        image.alt = link.querySelector('img')?.alt ?? '';
+        original.href = link.href;
+    } else {
+        image.style.display = 'none';
+        video.style.display = '';
+        video.src = link.getAttribute('data-href');
+        original.href = link.getAttribute('data-href');
+    }
+
     counter.textContent = `${index + 1} / ${items.length}`;
     dialog.classList.toggle('single', items.length === 1);
     dialog.classList.toggle('concealed', link.classList.contains('spoiler') && !link.classList.contains('revealed'));
@@ -40,7 +58,7 @@ document.addEventListener('click', (event) => {
 
     const gallery = link.closest('.gallery');
 
-    items = gallery ? [...gallery.querySelectorAll('a.media')] : [link];
+    items = gallery ? [...gallery.querySelectorAll('.media')] : [link];
     show(items.indexOf(link));
     dialog.showModal();
 });
@@ -59,6 +77,10 @@ dialog?.addEventListener('click', (event) => {
 });
 
 dialog?.addEventListener('keydown', (event) => {
+    if (event.target?.nodeName?.toLowerCase() === 'video') {
+        return;
+    }
+
     if (event.key === 'ArrowLeft') {
         show(index - 1);
     } else if (event.key === 'ArrowRight') {
@@ -66,4 +88,8 @@ dialog?.addEventListener('keydown', (event) => {
     }
 });
 
-dialog?.addEventListener('close', () => image.removeAttribute('src'));
+dialog?.addEventListener('close', () => {
+    image.removeAttribute('src');
+    video.pause();
+    video.removeAttribute('src');
+});

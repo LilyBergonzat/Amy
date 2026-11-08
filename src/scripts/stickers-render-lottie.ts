@@ -4,8 +4,8 @@ import puppeteer from 'puppeteer';
 import sharp from 'sharp';
 import { type LottiePlayer } from 'lottie-web';
 
-const SIZE = 160; // Discord's native sticker size
-const FRAME_STEP = 2; // most packs are 60fps, 30 is plenty
+const SIZE = 160;
+const FRAME_STEP = 2;
 const lottiePath = createRequire(import.meta.url).resolve('lottie-web/build/player/lottie_canvas.min.js');
 
 declare global {

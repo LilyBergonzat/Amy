@@ -50,7 +50,9 @@ function MediaTile({
 
     return (
         <Wrapper
-            {...(isVideo ? {} : { href: attachment.url, target: '_blank', rel: 'noopener' })}
+            {...(isVideo ?
+                { 'data-href': attachment.url }
+            :   { href: attachment.url, target: '_blank', rel: 'noopener' })}
             class={`media ${single ? 'w-fit' : 'aspect-square'} ${span} ${attachment.spoiler ? 'spoiler' : ''}`}
         >
             {isVideo ?

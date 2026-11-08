@@ -5,9 +5,9 @@ import { container, SapphireClient } from '@sapphire/framework';
 import type { ClientOptions } from 'discord.js';
 import { SettingsService } from './SettingsService.js';
 import { ThreadService } from './threads/ThreadService.js';
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { WebService } from './WebService.js';
 import { WizardService } from './WizardService.js';
+import { createPrisma } from './utils/database.js';
 
 export class AmyClient extends SapphireClient {
     public constructor(options: ClientOptions) {
@@ -37,10 +37,8 @@ export class AmyClient extends SapphireClient {
 
         await WizardService.init();
 
-        const adapter = new PrismaMariaDb(process.env.DATABASE_URL!);
-        const prisma = new PrismaClient({ adapter });
-        container.prisma = prisma;
-        await prisma.$connect();
+        container.prisma = createPrisma();
+        await container.prisma.$connect();
         this.logger.info('Connected to the database');
 
         this.logger.info('Starting web server...');

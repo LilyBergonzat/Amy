@@ -355,7 +355,8 @@ body:not(:has(#show-internal:checked)) .internal > * {
         0 24px 64px rgb(0 0 0 / 0.5);
 }
 
-.lightbox-image {
+.lightbox-image,
+.lightbox-video {
     display: block;
     max-width: min(calc(100vw - 13rem), 1280px);
     max-height: min(calc(100vh - 8rem), 860px);
@@ -363,7 +364,8 @@ body:not(:has(#show-internal:checked)) .internal > * {
     border-radius: 0.375rem;
 }
 
-.lightbox.concealed .lightbox-image {
+.lightbox.concealed .lightbox-image,
+.lightbox.concealed .lightbox-video {
     filter: blur(44px);
 }
 

@@ -88,9 +88,9 @@ export class TranscriptService {
             openedAt: this.thread.openedAt,
             closedAt: this.thread.closedAt,
             isOpen: this.thread.isOpen,
-            openedBy: getUserData(this.thread.openedByData),
+            openedBy: this.thread.openedByData ? getUserData(this.thread.openedByData) : null,
             recipient: getUserData(this.thread.recipientData),
-            openedByUser: this.thread.openedByUser,
+            openedByUser: this.thread.openedByUser !== false,
         };
     }
 

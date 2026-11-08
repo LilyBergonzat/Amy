@@ -18,17 +18,26 @@ enum ThreadOpen {
     OPEN
 }
 
+enum ThreadSource {
+    AMY
+    DRAGORY
+    KYB3R
+}
+
 model Thread {
-    id             String      @default(cuid())
-    idOpenedBy     String
-    openedByData   String      @db.Text
-    openedByUser   Boolean
+    id             String       @default(cuid())
+    idOpenedBy     String?
+    openedByData   String?      @db.Text
+    openedByUser   Boolean?
     idRecipient    String
-    recipientData  String      @db.Text
+    recipientData  String       @db.Text
     isOpen         ThreadOpen?
     idChannel      String?
     scheduledClose DateTime?
-    openedAt       DateTime    @default(now())
+    source         ThreadSource @default(AMY)
+    idLegacy       String?
+    legacyNumber   Int?
+    openedAt       DateTime     @default(now())
     closedAt       DateTime?
 
     messages ThreadMessage[]
@@ -36,6 +45,7 @@ model Thread {
     @@id(id)
     @@unique([idRecipient, isOpen])
     @@unique([idChannel])
+    @@unique([source, idLegacy])
     @@index([idChannel])
     @@map("thread")
 }
@@ -54,6 +64,7 @@ model ThreadMessage {
     internal             Boolean
     anonymous            Boolean?
     forwarded            Boolean  @default(false)
+    idLegacy             String?
     createdAt            DateTime @default(now())
 
     thread      Thread             @relation(fields: [idThread], references: [id], onDelete: Cascade)

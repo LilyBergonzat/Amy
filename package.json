@@ -19,7 +19,13 @@
         "lint": "prettier --check . && eslint src",
         "format": "prettier --write . && eslint --fix src",
         "postinstall": "prisma generate",
-        "script:stickers": "node dist/scripts/fetch-native-stickers.js && node dist/scripts/download-stickers.js && echo Converting... && node dist/scripts/render-lottie.js && node dist/scripts/render-apng.js && echo Done"
+        "script:stickers:native:fetch": "node dist/scripts/stickers-native-fetch.js",
+        "script:stickers:native:download": "node dist/scripts/stickers-native-download.js",
+        "script:stickers:render:lottie": "node dist/scripts/stickers-render-lottie.js",
+        "script:stickers:render:apng": "node dist/scripts/stickers-render-apng.js",
+        "script:stickers": "npm run script:stickers:native:fetch && npm run script:stickers:native:download && echo Converting... && npm run script:stickers:render:lottie && npm run script:stickers:render:apng && echo Done",
+        "script:dump:markdown-ast": "node dist/scripts/dump-markdown-ast.js",
+        "script:import:dragory": "node dist/scripts/import-dragory.js"
     },
     "dependencies": {
         "@hono/node-server": "^2.1.5",
@@ -39,9 +45,13 @@
         "discord.js": "^14.22.1",
         "dotenv": "^16.4.7",
         "dotenv-expand": "^1000.0.0",
+        "file-type": "^22.3.0",
         "gifuct-js": "^2.1.2",
         "highlight.js": "^11.12.0",
         "hono": "^4.13.14",
+        "knex": "^3.3.0",
+        "mysql2": "^3.24.6",
+        "sqlite3": "^6.0.1",
         "tslib": "^2.6.2",
         "tsx": "^4.23.15"
     },

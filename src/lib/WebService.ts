@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import { Forbidden, InternalServerError, NotFound, ServiceUnavailable, Unauthorized } from '../web/views/Error.js';
 import { MINUTE, SECOND, YEAR } from './utils/datetime.js';
 import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie';
+import { ThreadSource } from '../generated/prisma/enums.js';
 
 export const setCookie = (c: Context, name: string, value: string, options?: Parameters<typeof setSignedCookie>[4]) => {
     return setSignedCookie(c, name, value, process.env.SECRET, {
@@ -117,13 +118,31 @@ export class WebService {
     private configureRoutes() {
         this.app.get('/thread/:id', async (c) => {
             const id = c.req.param('id');
-            const service = id ? await TranscriptService.fromThreadId(id) : null;
+            const service = await TranscriptService.fromThreadId(id);
 
             if (!service) {
                 return respondNotFound(c);
             }
 
             return c.html(Transcript({ service }));
+        });
+
+        this.app.get('/logs/:id', async (c) => {
+            const id = c.req.param('id');
+            const thread = await container.prisma.thread.findUnique({
+                where: {
+                    source_idLegacy: {
+                        idLegacy: id,
+                        source: ThreadSource.DRAGORY,
+                    },
+                },
+            });
+
+            if (!thread) {
+                return respondNotFound(c);
+            }
+
+            return c.redirect(`/thread/${thread.id}`);
         });
 
         this.app.get('/thread/:id/attachment/:attachmentId', async (c) => {
