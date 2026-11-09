@@ -340,6 +340,10 @@ export class SettingsService {
         return (await this.isAnonymous(isAnonymousOverride)) ? this.get('anonymous-display-name') : author.displayName;
     }
 
+    public async getPrefix() {
+        return (await this.get('prefix')) ?? `${container.client.user!} `;
+    }
+
     public async getPrefixes() {
         return [await this.get('prefix'), ...(await this.getSnippetPrefixes())]
             .filter((p) => p !== null)

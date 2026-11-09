@@ -1,5 +1,5 @@
 import { container } from '@sapphire/framework';
-import { type UserData, type ThreadWithMessagesAndAttachments } from './ThreadService.js';
+import { type UserData, type ThreadWithMessagesAndAttachmentsAndEdits } from './ThreadService.js';
 import type { MentionData } from '../utils/mention.js';
 import type { buildStickersData } from './ThreadAttachmentService.js';
 import { convertedStickers } from '../utils/discord.js';
@@ -29,7 +29,8 @@ type TranscriptStickerData = {
     url: string;
 };
 
-type TranscriptMessage = {
+export type TranscriptMessage = {
+    id: string;
     kind: 'internal' | 'staff' | 'user';
     author: TranscriptUserData;
     contents: string;
@@ -39,6 +40,9 @@ type TranscriptMessage = {
     date: Date;
     anonymousSentBy: TranscriptUserData | null;
     forwarded: boolean;
+    editedAt: Date | null;
+    deletedAt: Date | null;
+    previousVersions: { contents: string; mentions: MentionData | null; date: Date }[];
 };
 
 const getUserData = (json: string): TranscriptUserData => {
@@ -58,7 +62,7 @@ const getAnonymousUserData = async (): Promise<TranscriptUserData> => {
 };
 
 export class TranscriptService {
-    private thread: ThreadWithMessagesAndAttachments;
+    private thread: ThreadWithMessagesAndAttachmentsAndEdits;
 
     public static async fromThreadId(id: string) {
         const thread = await container.prisma.thread.findUnique({
@@ -67,6 +71,7 @@ export class TranscriptService {
                 messages: {
                     include: {
                         attachments: true,
+                        edits: { orderBy: { createdAt: 'asc' } },
                     },
                 },
             },
@@ -79,7 +84,7 @@ export class TranscriptService {
         return new TranscriptService(thread);
     }
 
-    private constructor(thread: ThreadWithMessagesAndAttachments) {
+    private constructor(thread: ThreadWithMessagesAndAttachmentsAndEdits) {
         this.thread = thread;
     }
 
@@ -101,6 +106,7 @@ export class TranscriptService {
                     const anonymous = !row.internal && row.idStaff && row.anonymous;
 
                     return {
+                        id: row.id,
                         kind: (row.internal ? 'internal'
                         : row.idStaff ? 'staff'
                         : 'user') as TranscriptMessage['kind'],
@@ -136,6 +142,13 @@ export class TranscriptService {
                         date: row.createdAt,
                         anonymousSentBy: anonymous ? getUserData(row.senderData) : null,
                         forwarded: row.forwarded,
+                        editedAt: row.editedAt,
+                        deletedAt: row.deletedAt,
+                        previousVersions: row.edits.slice(0, -1).map((edit) => ({
+                            contents: edit.contents,
+                            mentions: edit.mentionsData ? JSON.parse(edit.mentionsData) : null,
+                            date: edit.createdAt,
+                        })),
                     };
                 }),
             )

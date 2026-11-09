@@ -66,8 +66,16 @@ export type ThreadWithMessages = Prisma.ThreadGetPayload<{
     include: { messages: true };
 }>;
 
+export type ThreadMessageWithThread = Prisma.ThreadMessageGetPayload<{
+    include: { thread: true };
+}>;
+
 export type ThreadWithMessagesAndAttachments = Prisma.ThreadGetPayload<{
     include: { messages: { include: { attachments: true } } };
+}>;
+
+export type ThreadWithMessagesAndAttachmentsAndEdits = Prisma.ThreadGetPayload<{
+    include: { messages: { include: { attachments: true; edits: { orderBy: { createdAt: 'asc' } } } } };
 }>;
 
 export class ThreadService {
@@ -105,6 +113,26 @@ export class ThreadService {
             (await container.threads.getOpenThread(recipient, openedBy)) ??
             (await this.createThread(recipient, openedBy))
         );
+    }
+
+    public async getThreadMessageFromMessage(
+        messageId: string,
+        inGuild: boolean,
+    ): Promise<ThreadMessageWithThread | null> {
+        return container.prisma.threadMessage.findFirst({
+            where: {
+                deletedAt: null,
+                ...(inGuild ?
+                    {
+                        OR: [
+                            { idMirrorMessage: messageId, internal: false },
+                            { idMessage: messageId, internal: true },
+                        ],
+                    }
+                :   { idMessage: messageId, idStaff: null, internal: false }),
+            },
+            include: { thread: true },
+        });
     }
 
     public async createThread(user: User, openedBy: User): Promise<ThreadWithMessages | null> {
@@ -162,6 +190,8 @@ export class ThreadService {
     }
 
     public async saveInternalMessage(thread: Thread, message: Message) {
+        const mentionsData = JSON.stringify(await buildMentionsData(message.content));
+
         return await container.prisma.threadMessage.create({
             data: {
                 idMessage: message.id,
@@ -171,9 +201,15 @@ export class ThreadService {
                 senderData: JSON.stringify(await computeUserData(message.author)),
                 contents: message.content,
                 stickersData: JSON.stringify(await buildStickersData(message)),
-                mentionsData: JSON.stringify(await buildMentionsData(message.content)),
+                mentionsData,
                 ...(await this.getAttachmentData(thread.id, [...message.attachments.values()])),
                 internal: true,
+                edits: {
+                    create: {
+                        contents: message.content,
+                        mentionsData,
+                    },
+                },
             },
         });
     }
@@ -181,6 +217,7 @@ export class ThreadService {
     public async saveUserMessage(thread: Thread, message: Message, transferredMessage: Message) {
         const messageData =
             message.reference?.type === MessageReferenceType.Forward ? message.messageSnapshots.first() : message;
+        const mentionsData = JSON.stringify(await buildMentionsData(messageData?.content));
 
         return await container.prisma.threadMessage.create({
             data: {
@@ -191,10 +228,16 @@ export class ThreadService {
                 senderData: JSON.stringify(await computeUserData(message.author)),
                 contents: messageData?.content ?? '',
                 stickersData: JSON.stringify(await buildStickersData(messageData)),
-                mentionsData: JSON.stringify(await buildMentionsData(messageData?.content)),
+                mentionsData,
                 ...(await this.getAttachmentData(thread.id, [...(messageData?.attachments.values() ?? [])])),
                 forwarded: message.reference?.type === MessageReferenceType.Forward,
                 internal: false,
+                edits: {
+                    create: {
+                        contents: messageData?.content ?? '',
+                        mentionsData,
+                    },
+                },
             },
         });
     }
@@ -204,23 +247,33 @@ export class ThreadService {
         contents: string | null,
         staff: User,
         transferredMessage: Message,
+        mirrorMessage: Message | null,
         anonymous: boolean,
         message?: Message,
     ) {
+        const mentionsData = JSON.stringify(await buildMentionsData(contents));
+
         return await container.prisma.threadMessage.create({
             data: {
                 idMessage: message?.id,
                 idThread: thread.id,
                 idStaff: staff.id,
                 idTransferredMessage: transferredMessage.id,
+                idMirrorMessage: mirrorMessage?.id,
                 messageData: message ? JSON.stringify(message.toJSON()) : null,
                 senderData: JSON.stringify(await computeUserData(staff)),
                 contents: contents ?? '',
                 stickersData: message ? JSON.stringify(await buildStickersData(message)) : undefined,
-                mentionsData: JSON.stringify(await buildMentionsData(contents)),
+                mentionsData,
                 ...(message ? await this.getAttachmentData(thread.id, [...message.attachments.values()]) : {}),
                 internal: false,
                 anonymous,
+                edits: {
+                    create: {
+                        contents: contents ?? '',
+                        mentionsData,
+                    },
+                },
             },
         });
     }
@@ -244,7 +297,7 @@ export class ThreadService {
         message?: Message,
         anonymousOverride?: boolean,
     ) {
-        const transferredMessage = await this.postService.postStaffMessage(
+        const [transferredMessage, mirrorMessage] = await this.postService.postStaffMessage(
             thread,
             contents,
             staff,
@@ -261,6 +314,7 @@ export class ThreadService {
             contents,
             staff.user,
             transferredMessage,
+            mirrorMessage ?? null,
             await container.settings.isAnonymous(anonymousOverride),
             message,
         );
@@ -299,6 +353,41 @@ export class ThreadService {
 
     public async getThreadChannel(thread: Thread) {
         return getSendableChannel(thread.idChannel);
+    }
+
+    public async updateThreadMessage(threadMessage: ThreadMessageWithThread, contents: string, editorId: string) {
+        if (threadMessage.thread.isOpen === ThreadOpen.OPEN) {
+            await this.postService.updateThreadMessage(threadMessage, contents);
+        }
+
+        const mentionsData = JSON.stringify(await buildMentionsData(contents));
+
+        await container.prisma.threadMessage.update({
+            where: { id: threadMessage.id },
+            data: {
+                contents,
+                mentionsData,
+                editedAt: new Date(),
+                edits: {
+                    create: {
+                        idEditor: editorId,
+                        contents,
+                        mentionsData,
+                    },
+                },
+            },
+        });
+    }
+
+    public async deleteThreadMessage(threadMessage: ThreadMessageWithThread) {
+        if (threadMessage.thread.isOpen === ThreadOpen.OPEN) {
+            await this.postService.deleteThreadMessage(threadMessage);
+        }
+
+        await container.prisma.threadMessage.update({
+            data: { deletedAt: new Date() },
+            where: { id: threadMessage.id },
+        });
     }
 
     private async getAttachmentData(threadId: string, attachments: Attachment[]) {

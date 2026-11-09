@@ -457,6 +457,30 @@ body:not(:has(#show-internal:checked)) .internal > * {
     padding-inline-start: 0.75rem;
 }
 
+.deleted-group .count-public {
+    display: none;
+}
+
+body:not(:has(#show-internal:checked)) .deleted-group {
+    .count-all {
+        display: none;
+    }
+
+    .count-public {
+        display: inline;
+    }
+}
+
+body:not(:has(#show-internal:checked)) .deleted-group:not(:has(.chat)) {
+    display: none;
+}
+
+.deleted-messages {
+    opacity: 0.6;
+    border-left: 2px dashed var(--color-error);
+    padding-left: 0.5rem;
+}
+
 .mention {
     --c1: var(--clickable);
 

@@ -51,27 +51,47 @@ model Thread {
 }
 
 model ThreadMessage {
-    id                   String   @default(cuid())
+    id                   String    @default(cuid())
     idMessage            String?
     idThread             String
     idStaff              String?
     idTransferredMessage String?
-    senderData           String   @db.Text
-    messageData          String?  @db.Text
-    contents             String   @db.Text
-    stickersData         String?  @db.Text
-    mentionsData         String?  @db.Text
+    idMirrorMessage      String?
+    senderData           String    @db.Text
+    messageData          String?   @db.Text
+    contents             String    @db.Text
+    stickersData         String?   @db.Text
+    mentionsData         String?   @db.Text
     internal             Boolean
     anonymous            Boolean?
-    forwarded            Boolean  @default(false)
+    forwarded            Boolean   @default(false)
     idLegacy             String?
-    createdAt            DateTime @default(now())
+    createdAt            DateTime  @default(now())
+    editedAt             DateTime?
+    deletedAt            DateTime?
 
-    thread      Thread             @relation(fields: [idThread], references: [id], onDelete: Cascade)
+    thread      Thread              @relation(fields: [idThread], references: [id], onDelete: Cascade)
+    edits       ThreadMessageEdit[]
     attachments ThreadAttachment[]
 
     @@id(id)
+    @@index([idMessage])
+    @@index([idMirrorMessage])
+    @@index([idTransferredMessage])
     @@map("thread_message")
+}
+
+model ThreadMessageEdit {
+    id              String        @id @default(cuid())
+    idThreadMessage String
+    message         ThreadMessage @relation(fields: [idThreadMessage], references: [id], onDelete: Cascade)
+    idEditor        String?
+    contents        String        @db.Text
+    mentionsData    String?       @db.Text
+    createdAt       DateTime      @default(now())
+
+    @@index([idThreadMessage, createdAt])
+    @@map("thread_message_edit")
 }
 
 model ThreadAttachment {

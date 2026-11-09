@@ -1,5 +1,6 @@
-import type { Thread } from '../../generated/prisma/client.js';
+import { type Thread, type ThreadMessage, ThreadOpen } from '../../generated/prisma/client.js';
 import {
+    type ComponentInContainer,
     ContainerBuilder,
     FileBuilder,
     type GuildMember,
@@ -9,10 +10,12 @@ import {
     type MessageCreateOptions,
     MessageFlags,
     MessageReferenceType,
+    type SendableChannels,
     SeparatorBuilder,
     SeparatorSpacingSize,
     TextChannel,
     TextDisplayBuilder,
+    type TopLevelComponent,
     type Webhook,
 } from 'discord.js';
 import { container } from '@sapphire/framework';
@@ -24,6 +27,8 @@ import {
     stickerMedia,
 } from '../utils/discord.js';
 import type { Optional } from '@prisma/client/runtime/client';
+import type { ThreadMessageWithThread } from './ThreadService.js';
+import { ComponentType } from 'discord-api-types/v10';
 
 export class ThreadPostService {
     private static instance: ThreadPostService;
@@ -62,7 +67,7 @@ export class ThreadPostService {
         const user = await container.client.users.fetch(thread.idRecipient).catch(() => null);
 
         if (!user) {
-            return;
+            return [];
         }
 
         if (message && message.partial) {
@@ -72,13 +77,13 @@ export class ThreadPostService {
         const channel = await container.threads.getThreadChannel(thread);
 
         if (!channel) {
-            return;
+            return [];
         }
 
         const displayName = await container.settings.getStaffDisplayName(staff, anonymousOverride);
 
         if (!displayName) {
-            return;
+            return [];
         }
 
         const media = message ? [...message.attachments.values()].filter(isGalleryMedia) : [];
@@ -146,10 +151,119 @@ export class ThreadPostService {
         };
 
         const sentMessage = await user.send(data);
+        const mirrorMessage = await channel.send(data).catch((error) => container.logger.error(error));
 
-        await channel.send(data).catch(console.error);
+        return [sentMessage, mirrorMessage];
+    }
 
-        return sentMessage;
+    public async updateThreadMessage(threadMessage: ThreadMessageWithThread, content: string) {
+        if (threadMessage.thread.isOpen !== ThreadOpen.OPEN || threadMessage.internal) {
+            return;
+        }
+
+        if (!threadMessage.idStaff && threadMessage.idTransferredMessage) {
+            await this.updateUserThreadMessage(threadMessage, content);
+        }
+
+        if (threadMessage.idStaff) {
+            await this.updateStaffThreadMessage(threadMessage, content);
+        }
+    }
+
+    public async deleteThreadMessage(threadMessage: ThreadMessageWithThread) {
+        const { thread } = threadMessage;
+
+        if (thread.isOpen !== ThreadOpen.OPEN || threadMessage.internal) {
+            return;
+        }
+
+        const channel = await container.threads.getThreadChannel(thread);
+
+        if (!channel) {
+            return;
+        }
+
+        if (threadMessage.idStaff) {
+            await this.deleteStaffThreadMessage(thread, threadMessage, channel);
+        } else {
+            await this.deleteUserThreadMessage(threadMessage, channel);
+        }
+    }
+
+    private async deleteStaffThreadMessage(thread: Thread, threadMessage: ThreadMessage, channel: SendableChannels) {
+        const user = await container.client.users.fetch(thread.idRecipient).catch(() => null);
+        const dmCopy = await (
+            await user?.createDM()
+        )?.messages
+            .fetch(threadMessage.idTransferredMessage!)
+            .catch(() => null);
+        const mirror =
+            threadMessage.idMirrorMessage ?
+                await channel.messages.fetch(threadMessage.idMirrorMessage).catch(() => null)
+            :   null;
+
+        await dmCopy?.delete().catch(() => null);
+        await mirror?.delete().catch(() => null);
+    }
+
+    private async deleteUserThreadMessage(threadMessage: ThreadMessage, channel: SendableChannels) {
+        const copy = await channel.messages.fetch(threadMessage.idTransferredMessage!).catch(() => null);
+
+        await copy?.reply({
+            content: '-# 🗑️ Deleted by user',
+            allowedMentions: { repliedUser: false },
+        });
+
+        await copy?.react('🗑️');
+    }
+
+    private async updateUserThreadMessage(threadMessage: ThreadMessageWithThread, content: string) {
+        const webhook = await this.getThreadWebhook(threadMessage.thread);
+        const message = await webhook?.fetchMessage(threadMessage.idTransferredMessage!).catch(() => null);
+
+        if (!message) {
+            return;
+        }
+
+        await webhook?.editMessage(message.id, { content });
+    }
+
+    private async updateStaffThreadMessage(threadMessage: ThreadMessageWithThread, contents: string) {
+        const staffChannel = await container.threads.getThreadChannel(threadMessage.thread);
+        const dmChannel = await (
+            await container.client.users.fetch(threadMessage.thread.idRecipient).catch(() => null)
+        )?.createDM();
+        const mirrorMessage =
+            threadMessage.idMirrorMessage ?
+                await staffChannel?.messages.fetch(threadMessage.idMirrorMessage).catch(() => null)
+            :   null;
+        const dmMessage =
+            threadMessage.idTransferredMessage ?
+                await dmChannel?.messages.fetch(threadMessage.idTransferredMessage).catch(() => null)
+            :   null;
+
+        const contentsComponent = new TextDisplayBuilder().setContent(contents) as unknown as ComponentInContainer;
+        const updateComponents = (components: TopLevelComponent[]) => {
+            const container = components.find((component) => component.type === ComponentType.Container);
+
+            if (container) {
+                if (container.components.length > 2) {
+                    container.components[2] = contentsComponent;
+                } else {
+                    container.components.push(contentsComponent);
+                }
+            }
+
+            return [...(container ? [container] : []), ...components.slice(1)];
+        };
+
+        if (mirrorMessage) {
+            await mirrorMessage.edit({ components: updateComponents(mirrorMessage.components) });
+        }
+
+        if (dmMessage) {
+            await dmMessage.edit({ components: updateComponents(dmMessage.components) });
+        }
     }
 
     private async getThreadWebhook(thread: Thread) {

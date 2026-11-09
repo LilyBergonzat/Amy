@@ -21,6 +21,34 @@ export class MessageRelayService {
         }
     }
 
+    public async messageUpdateHandler(message: Message) {
+        const threadMessage = await container.threads.getThreadMessageFromMessage(message.id, message.inGuild());
+
+        if (!threadMessage) {
+            return;
+        }
+
+        if (message.partial) {
+            await message.fetch();
+        }
+
+        if (message.author.id === container.client.user!.id || threadMessage.contents === message.content) {
+            return;
+        }
+
+        await container.threads.updateThreadMessage(threadMessage, message.content, message.author.id);
+    }
+
+    public async messageDeleteHandler(message: Message) {
+        const threadMessage = await container.threads.getThreadMessageFromMessage(message.id, message.inGuild());
+
+        if (!threadMessage) {
+            return;
+        }
+
+        await container.threads.deleteThreadMessage(threadMessage);
+    }
+
     private async guildMessageCreateHandler(message: Message) {
         if (message.partial) {
             await message.fetch();

@@ -13,6 +13,7 @@ import { buildMentionsData } from '../lib/utils/mention.js';
 import { SettingsService } from '../lib/SettingsService.js';
 import { saveAttachment } from '../lib/threads/ThreadAttachmentService.js';
 import { pathToFileURL } from 'node:url';
+import type { ThreadMessageCreateWithoutThreadInput } from '../generated/prisma/models/ThreadMessage.js';
 
 type DragoryThread = {
     id: string;
@@ -205,13 +206,16 @@ for (let i = 0; i < threads.length; i++) {
     const userId = thread.user_id;
     const username = thread.user_name ?? client.user!.username;
     const originalThreadMessages = messages.filter((m) => m.thread_id === thread.id);
-    const threadMessages = [];
+    const threadMessages = [] as ThreadMessageCreateWithoutThreadInput[];
 
     console.log(
         `${progress} (${percent}): Thread ${thread.id} created at ${thread.created_at} with ${originalThreadMessages.length} message${originalThreadMessages.length > 1 ? 's' : ''}`,
     );
 
     for (const message of originalThreadMessages) {
+        const mentionsData = JSON.stringify(await buildMentionsData(message.body));
+        const createdAt = parseDragoryDate(message.created_at);
+
         threadMessages.push({
             idMessage:
                 isStaffMessage(message) ?
@@ -225,11 +229,12 @@ for (let i = 0; i < threads.length; i++) {
                 ),
             ),
             contents: message.body ?? '',
-            mentionsData: JSON.stringify(await buildMentionsData(message.body)),
+            mentionsData,
             internal: isInternalMessage(message),
             anonymous: isStaffReply(message) ? message.is_anonymous === 1 : null,
             idLegacy: String(message.id),
-            createdAt: parseDragoryDate(message.created_at),
+            createdAt,
+            edits: { create: { contents: message.body ?? '', mentionsData, createdAt } },
         });
     }
 

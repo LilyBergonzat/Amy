@@ -5,3 +5,10 @@ export function getCommandName(canonical: string) {
 
     return `${prefix}${override && override.length > 0 ? override : canonical}`;
 }
+
+export function isCommandEnabled(name: string) {
+    return (
+        !process.env[`DISABLE_CONTEXT_MENU_${name.toUpperCase()}`] &&
+        !process.env[`DISABLE_CONTEXT_MENU_${getCommandName(name).toUpperCase()}`]
+    );
+}

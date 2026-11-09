@@ -95,6 +95,7 @@ declare global {
             SECRET: string;
             COMMAND_PREFIX?: string;
             [key: `COMMAND_NAME_${string}`]: string | undefined;
+            [key: `DISABLE_CONTEXT_MENU_${string}`]: string | undefined;
         }
     }
 }
