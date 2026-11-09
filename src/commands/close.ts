@@ -8,15 +8,20 @@ import { getCommandName } from '../lib/CommandService.js';
 @ApplyOptions<Command.Options>({
     description: '(In a thread) Close the current thread',
     aliases: ['c'],
-    options: ['delay'],
 })
 export class CloseCommand extends Command {
     public override async chatInputRun(interaction: Command.ChatInputCommandInteraction) {
         const delay = interaction.options.getString('delay');
+        const cancel = interaction.options.getBoolean('cancel');
         const duration = stringToDuration(delay);
 
         if (delay && duration === null) {
             await interaction.reply({ content: 'The duration you entered seems to be invalid.' });
+            return;
+        }
+
+        if (duration && cancel) {
+            await interaction.reply('You cannot cancel a scheduled thread close **and** pick a delay.');
             return;
         }
 
@@ -26,6 +31,18 @@ export class CloseCommand extends Command {
 
         if (!thread) {
             await interaction.editReply({ content: 'This channel does not seem to be a modmail thread.' });
+            return;
+        }
+
+        if (cancel) {
+            if (!thread.scheduledClose) {
+                await interaction.editReply('This thread is not scheduled to close.');
+                return;
+            }
+
+            await this.container.threads.maybeCancelScheduledClose(thread);
+            await interaction.deleteReply();
+
             return;
         }
 
@@ -42,9 +59,10 @@ export class CloseCommand extends Command {
 
     public override async messageRun(message: Message, args: Args) {
         const delay = await args.pick('string').catch(() => null);
-        const duration = stringToDuration(delay);
+        const cancel = delay?.toLowerCase() === 'cancel';
+        const duration = stringToDuration(cancel ? null : delay);
 
-        if (delay && duration === null) {
+        if (delay && !cancel && duration === null) {
             await message.reply({ content: 'The duration you entered seems to be invalid.' });
             return;
         }
@@ -53,6 +71,16 @@ export class CloseCommand extends Command {
 
         if (!thread) {
             await message.reply({ content: 'This channel does not seem to be a modmail thread.' });
+            return;
+        }
+
+        if (cancel) {
+            if (!thread.scheduledClose) {
+                await message.reply('This thread is not scheduled to close.');
+                return;
+            }
+
+            await this.container.threads.maybeCancelScheduledClose(thread);
             return;
         }
 
@@ -74,7 +102,10 @@ export class CloseCommand extends Command {
                 .setDescription(this.description)
                 .setContexts(InteractionContextType.Guild)
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                .addStringOption((option) => option.setName('delay').setDescription('Close after a delay (i.e. "3h")')),
+                .addStringOption((option) => option.setName('delay').setDescription('Close after a delay (i.e. "3h")'))
+                .addBooleanOption((option) =>
+                    option.setName('cancel').setDescription('Cancel a thread close schedule'),
+                ),
         );
     }
 }

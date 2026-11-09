@@ -286,6 +286,7 @@ export class ThreadService {
         }
 
         await this.saveUserMessage(thread, message, transferredMessage);
+        await this.maybeCancelScheduledClose(thread);
 
         return transferredMessage;
     }
@@ -320,35 +321,38 @@ export class ThreadService {
         );
 
         await message?.delete();
+        await this.maybeCancelScheduledClose(thread);
 
         return transferredMessage;
     }
 
     public async closeThread(thread: Thread, delay?: number | null) {
+        const channel = await this.getThreadChannel(thread);
+
         if (delay) {
             await container.prisma.thread.update({
                 where: { id: thread.id },
                 data: { scheduledClose: new Date(Date.now() + delay) },
             });
 
+            void channel?.setName(channel.name.replace('↳', '⌛')).catch((error) => container.logger.error(error));
+
             return;
         }
 
-        const channel = await getSendableChannel(thread.idChannel);
+        await container.prisma.thread.update({
+            where: { id: thread.id },
+            data: { closedAt: new Date(), isOpen: null, scheduledClose: null, idChannel: null },
+        });
 
         if (!channel) {
-            console.warn(`Tried to close thread ${thread.id} and failed: could not fetch thread channel.`);
+            container.logger.warn(`Tried to close thread ${thread.id} and failed: could not fetch thread channel.`);
         }
 
         const channelId = channel?.id;
 
         await channel?.delete('Thread closed.');
         await this.logService.logClosedThread(thread, channelId);
-
-        await container.prisma.thread.update({
-            where: { id: thread.id },
-            data: { closedAt: new Date(), isOpen: null },
-        });
     }
 
     public async getThreadChannel(thread: Thread) {
@@ -388,6 +392,25 @@ export class ThreadService {
             data: { deletedAt: new Date() },
             where: { id: threadMessage.id },
         });
+    }
+
+    public async maybeCancelScheduledClose(thread: Thread) {
+        if (thread.isOpen !== ThreadOpen.OPEN || !thread.scheduledClose) {
+            return;
+        }
+
+        const channel = await this.getThreadChannel(thread);
+
+        await container.prisma.thread.update({
+            data: { scheduledClose: null },
+            where: { id: thread.id },
+        });
+
+        void channel?.setName(channel.name.replace('⌛', '↳')).catch((error) => container.logger.error(error));
+
+        thread.scheduledClose = null;
+
+        await channel?.send('Canceling scheduled close.').catch((error) => container.logger.error(error));
     }
 
     private async getAttachmentData(threadId: string, attachments: Attachment[]) {

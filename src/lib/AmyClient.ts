@@ -8,6 +8,7 @@ import { ThreadService } from './threads/ThreadService.js';
 import { WebService } from './WebService.js';
 import { WizardService } from './WizardService.js';
 import { createPrisma } from './utils/database.js';
+import { ScheduledCloseService } from './ScheduledCloseService.js';
 
 export class AmyClient extends SapphireClient {
     public constructor(options: ClientOptions) {
@@ -50,8 +51,10 @@ export class AmyClient extends SapphireClient {
     }
 
     public override async destroy() {
-        await container.web?.destroy().catch(this.logger.error);
-        await container.prisma?.$disconnect().catch(this.logger.error);
+        new ScheduledCloseService().stop();
+        await container.web?.destroy().catch((error) => this.logger.error(error));
+        await container.prisma?.$disconnect().catch((error) => this.logger.error(error));
+
         return super.destroy();
     }
 }
