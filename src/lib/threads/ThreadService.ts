@@ -108,6 +108,10 @@ export class ThreadService {
         return thread ? this.ensureValidThread(thread, recipient, openedBy) : null;
     }
 
+    public async getThreads(recipient: User): Promise<Thread[]> {
+        return container.prisma.thread.findMany({ where: { idRecipient: recipient.id } });
+    }
+
     public async getOpenThreadOrCreate(recipient: User, openedBy: User): Promise<ThreadWithMessages | null> {
         return (
             (await container.threads.getOpenThread(recipient, openedBy)) ??

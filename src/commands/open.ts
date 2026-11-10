@@ -11,7 +11,9 @@ import { getCommandName } from '../lib/CommandService.js';
 })
 export class OpenCommand extends Command {
     public override async messageRun(message: Message, args: Args) {
-        const recipientId = await args.pick('string').catch(() => null);
+        const userInput = await args.pick('string').catch(() => null);
+        const matches = /(?<userId>\d{17,20})/v.exec(userInput ?? '');
+        const recipientId = matches?.groups?.userId;
         const recipient = recipientId ? await message.client.users.fetch(recipientId).catch(() => null) : null;
 
         if (!recipient) {
