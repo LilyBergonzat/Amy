@@ -142,7 +142,7 @@ export class WebService {
                 return respondNotFound(c);
             }
 
-            return c.redirect(`/thread/${thread.id}`);
+            return c.redirect(this.url(`/thread/${thread.id}`));
         });
 
         this.app.get('/thread/:id/attachment/:attachmentId', async (c) => {

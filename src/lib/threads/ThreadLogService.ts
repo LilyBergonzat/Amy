@@ -21,7 +21,7 @@ export class ThreadLogService {
         }
 
         await logChannel.send(
-            `Thread ${thread.id} to <@${thread.idRecipient}> closed (opened by <@${thread.idOpenedBy}>).\n${container.web.url(`/thread/${thread.id}`)}${channelId ? `\n-# Channel id: ${channelId}` : ''}`,
+            `Thread ${thread.id} to <@${thread.idRecipient}> closed (opened by <@${thread.idOpenedBy}>).\n<${container.web.url(`/thread/${thread.id}`)}>${channelId ? `\n-# Channel id: ${channelId}` : ''}`,
         );
     }
 }
