@@ -86,6 +86,7 @@ export class ThreadPostService {
             return [];
         }
 
+        const isAnonymous = await container.settings.isAnonymous(anonymousOverride);
         const media = message ? [...message.attachments.values()].filter(isGalleryMedia) : [];
         const files = message ? [...message.attachments.values()].filter(isNotGalleryMedia) : [];
         const stickers: StickerMedia[] =
@@ -95,7 +96,7 @@ export class ThreadPostService {
                 )
             :   [];
 
-        const data: MessageCreateOptions = {
+        const buildData = (footer?: string): MessageCreateOptions => ({
             flags: MessageFlags.IsComponentsV2,
             components: [
                 new ContainerBuilder()
@@ -103,7 +104,8 @@ export class ThreadPostService {
                     .addSeparatorComponents([
                         new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
                     ])
-                    .addTextDisplayComponents(contents ? [new TextDisplayBuilder().setContent(contents)] : []),
+                    .addTextDisplayComponents(contents ? [new TextDisplayBuilder().setContent(contents)] : [])
+                    .addTextDisplayComponents(footer ? [new TextDisplayBuilder().setContent(`-# ${footer}`)] : []),
                 ...(media.length > 0 ?
                     [
                         new MediaGalleryBuilder().addItems(
@@ -148,10 +150,12 @@ export class ThreadPostService {
                 })),
                 ...stickers.filter((stickerMedia) => stickerMedia.isConverted).map((stickerMedia) => stickerMedia.file),
             ],
-        };
+        });
 
-        const sentMessage = await user.send(data);
-        const mirrorMessage = await channel.send(data).catch((error) => container.logger.error(error));
+        const sentMessage = await user.send(buildData());
+        const mirrorMessage = await channel.send(buildData(
+            isAnonymous ? `Sent anonymously by **${staff.displayName}**` : undefined
+        )).catch((error) => container.logger.error(error));
 
         return [sentMessage, mirrorMessage];
     }
