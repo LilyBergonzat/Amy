@@ -76,7 +76,7 @@ export class MessageRelayService {
             await message.fetch();
         }
 
-        const thread = await container.threads.getOpenThreadOrCreate(message.author, message.author);
+        const { thread, created } = await container.threads.getOpenThreadOrCreate(message.author, message.author);
 
         if (!thread) {
             await message.reply(
@@ -85,7 +85,7 @@ export class MessageRelayService {
             return;
         }
 
-        const justCreated = thread.messages.length < 1 && thread.openedByUser;
+        const justCreated = created && thread.openedByUser;
         const transferredMessage = await container.threads.sendMessageFromUser(thread, message);
 
         if (!transferredMessage) {

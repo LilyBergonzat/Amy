@@ -66,6 +66,11 @@ export type ThreadWithMessages = Prisma.ThreadGetPayload<{
     include: { messages: true };
 }>;
 
+export type OpenThreadResult = {
+    thread: ThreadWithMessages | null;
+    created: boolean;
+};
+
 export type ThreadMessageWithThread = Prisma.ThreadMessageGetPayload<{
     include: { thread: true };
 }>;
@@ -83,6 +88,7 @@ export class ThreadService {
 
     private postService!: ThreadPostService;
     private logService!: ThreadLogService;
+    private readonly recipientLocks: Map<string, Promise<unknown>> = new Map();
 
     public constructor() {
         if (ThreadService.instance) {
@@ -112,11 +118,16 @@ export class ThreadService {
         return container.prisma.thread.findMany({ where: { idRecipient: recipient.id } });
     }
 
-    public async getOpenThreadOrCreate(recipient: User, openedBy: User): Promise<ThreadWithMessages | null> {
-        return (
-            (await container.threads.getOpenThread(recipient, openedBy)) ??
-            (await this.createThread(recipient, openedBy))
-        );
+    public async getOpenThreadOrCreate(recipient: User, openedBy: User): Promise<OpenThreadResult> {
+        return this.withRecipientLock(recipient.id, async (): Promise<OpenThreadResult> => {
+            const existingThread = await this.getOpenThread(recipient, openedBy);
+
+            if (existingThread) {
+                return { thread: existingThread, created: false };
+            }
+
+            return { thread: await this.createThread(recipient, openedBy), created: true };
+        });
     }
 
     public async getThreadMessageFromMessage(
@@ -161,7 +172,34 @@ export class ThreadService {
             await channel.lockPermissions();
         } catch (e) {
             container.logger.error(e);
+            await channel.delete().catch((error) => container.logger.error(error));
             return null;
+        }
+
+        let thread: ThreadWithMessages;
+
+        try {
+            thread = await container.prisma.thread.create({
+                data: {
+                    idOpenedBy: openedBy.id,
+                    openedByData: JSON.stringify(await computeUserData(openedBy)),
+                    openedByUser: user.id === openedBy.id,
+                    idRecipient: user.id,
+                    recipientData: JSON.stringify(await computeUserData(user)),
+                    isOpen: ThreadOpen.OPEN,
+                    idChannel: channel.id,
+                },
+                include: { messages: true },
+            });
+        } catch (error) {
+            await channel.delete().catch((deleteError) => container.logger.error(deleteError));
+
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                container.logger.warn(`Thread for ${user.id} was created concurrently, using the existing one.`);
+                return this.getOpenThread(user, openedBy);
+            }
+
+            throw error;
         }
 
         const newThreadPing = await container.settings.get('new-thread-ping');
@@ -171,18 +209,7 @@ export class ThreadService {
             await channel.send(`${newThreadPing ? `<@&${newThreadPing}>` : ''}\n${newThreadMessage ?? ''}`);
         }
 
-        return await container.prisma.thread.create({
-            data: {
-                idOpenedBy: openedBy.id,
-                openedByData: JSON.stringify(await computeUserData(openedBy)),
-                openedByUser: user.id === openedBy.id,
-                idRecipient: user.id,
-                recipientData: JSON.stringify(await computeUserData(user)),
-                isOpen: ThreadOpen.OPEN,
-                idChannel: channel.id,
-            },
-            include: { messages: true },
-        });
+        return thread;
     }
 
     public async getThreadByChannel(channelId: string) {
@@ -426,6 +453,21 @@ export class ThreadService {
             :   [];
 
         return data.length > 0 ? { attachments: { create: data } } : {};
+    }
+
+    private async withRecipientLock<T>(recipientId: string, callback: () => Promise<T>): Promise<T> {
+        const previous = this.recipientLocks.get(recipientId) ?? Promise.resolve();
+        const current = previous.catch(() => undefined).then(callback);
+
+        this.recipientLocks.set(recipientId, current);
+
+        try {
+            return await current;
+        } finally {
+            if (this.recipientLocks.get(recipientId) === current) {
+                this.recipientLocks.delete(recipientId);
+            }
+        }
     }
 
     private async ensureValidThread(

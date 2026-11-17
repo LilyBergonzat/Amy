@@ -45,16 +45,14 @@ export class OpenCommand extends Command {
     }
 
     private async execute(openedBy: User, recipient: User) {
-        let thread = await this.container.threads.getOpenThread(recipient, openedBy);
-
-        if (thread) {
-            return `There is already an open thread with this user: <#${thread.idChannel}>`;
-        }
-
-        thread = await this.container.threads.createThread(recipient, openedBy);
+        const { thread, created } = await this.container.threads.getOpenThreadOrCreate(recipient, openedBy);
 
         if (!thread) {
             return `Unable to open a new thread. Make sure the bot is properly configured.`;
+        }
+
+        if (!created) {
+            return `There is already an open thread with this user: <#${thread.idChannel}>`;
         }
 
         return `New thread created: <#${thread.idChannel}>`;
