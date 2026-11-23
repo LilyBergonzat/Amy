@@ -128,20 +128,42 @@ export class MessageRelayService {
         }
 
         const regex = /(?<![\d:])(?<snowflake>\d{17,20})(?![\d>])/gv;
-        const snowflakes = new Set<string>();
+        const snowflakes = new Map<string, string>();
         let matches;
 
         do {
             matches = regex.exec(content);
-            matches?.groups?.snowflake && snowflakes.add(matches.groups.snowflake);
+
+            if (!matches?.groups?.snowflake || snowflakes.has(matches.groups.snowflake)) {
+                continue;
+            }
+
+            const id = matches.groups.snowflake;
+            const role = transferredMessage.guild!.roles.cache.get(id);
+            const user = !role ? await container.client.users.fetch(id).catch(() => null) : null;
+            const channel = !role && !user ? await container.client.channels.fetch(id).catch(() => null) : null;
+            let type = `(type unknown)`;
+
+            if (role) {
+                type = role.toString();
+            } else if (user) {
+                type = `${user.toString()} (${user.displayName} \`${user.username}\`)`;
+            } else if (channel) {
+                type = channel.toString();
+            }
+
+            snowflakes.set(id, type);
         } while (matches);
 
         if (snowflakes.size < 1) {
             return;
         }
 
-        await transferredMessage.reply(
-            `-# IDs in this message:\n${[...snowflakes].map((s) => `-# - \`${s}\``).join('\n')}`,
-        );
+        const response = `-# IDs in this message:\n${[...snowflakes.entries()].map(([id, type]) => `-# - \`${id}\` ${type}`).join('\n')}`;
+
+        await transferredMessage.reply({
+            content: response.length <= 2000 ? response : response.slice(0, response.slice(0, 2000).lastIndexOf('\n')),
+            allowedMentions: { parse: [] },
+        });
     }
 }

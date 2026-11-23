@@ -12,12 +12,17 @@ import { WebService } from '../lib/WebService.js';
 export class LinksCommand extends Command {
     public override async messageRun(message: Message, args: Args) {
         const userInput = await args.pick('string').catch(() => null);
+        const thread = userInput ? null : await this.container.threads.getThreadByChannel(message.channelId);
         const matches = /(?<userId>\d{17,20})/v.exec(userInput ?? '');
-        const userId = matches?.groups?.userId;
+        const userId = matches?.groups?.userId ?? thread?.idRecipient;
         const user = userId ? await message.client.users.fetch(userId).catch(() => null) : null;
 
         if (!user) {
-            await message.reply('Could not find this user.');
+            await message.reply(
+                userInput ? 'Could not find this user.' : (
+                    'You need to either execute this in a modmail thread or provide a user id.'
+                ),
+            );
             return;
         }
 
@@ -26,9 +31,22 @@ export class LinksCommand extends Command {
 
     public override async chatInputRun(interaction: ChatInputCommandInteraction) {
         await interaction.reply({ content: 'Searching...', flags: MessageFlags.Ephemeral });
-        await this.execute(interaction.options.getUser('user', true), (content: string) =>
-            interaction.followUp(content),
-        );
+
+        const userOption = interaction.options.getUser('user');
+        const thread = userOption ? null : await this.container.threads.getThreadByChannel(interaction.channelId);
+        const threadUser = thread ? await interaction.client.users.fetch(thread.idRecipient).catch(() => null) : null;
+        const user = userOption ?? threadUser;
+
+        if (!user) {
+            await interaction.editReply(
+                userOption ? 'Could not find this user.' : (
+                    'You need to either execute this in a modmail thread or provide a user id.'
+                ),
+            );
+            return;
+        }
+
+        await this.execute(user, (content: string) => interaction.followUp(content));
         await interaction.editReply('Done.');
     }
 
@@ -40,7 +58,7 @@ export class LinksCommand extends Command {
                 .setContexts(InteractionContextType.Guild)
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addUserOption((option) =>
-                    option.setName('user').setDescription('The user to list all threads of').setRequired(true),
+                    option.setName('user').setDescription('The user to list all threads of').setRequired(false),
                 ),
         );
     }
