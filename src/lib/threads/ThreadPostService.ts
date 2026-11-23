@@ -94,7 +94,10 @@ export class ThreadPostService {
         }
 
         const isAnonymous = await container.settings.isAnonymous(anonymousOverride);
-        const avatar = isAnonymous ? guild.iconURL({ size: 64 }) : staff.displayAvatarURL({ size: 64 });
+        const avatar =
+            isAnonymous ?
+                guild.iconURL({ size: 64, forceStatic: true })
+            :   staff.displayAvatarURL({ size: 64, forceStatic: true });
         const sentMessage = await user.send(await this.buildMessage(displayName, avatar, contents, message));
         const mirrorMessage = await channel
             .send(
@@ -344,7 +347,9 @@ export class ThreadPostService {
         const guild = await container.settings.getInboxServer();
         const member = message.member ?? (await guild?.members.fetch(message.author.id).catch(() => null));
         const displayName = member?.displayName ?? message.author.displayName;
-        const avatar = member?.displayAvatarURL({ size: 64 }) ?? message.author.displayAvatarURL({ size: 64 });
+        const avatar =
+            member?.displayAvatarURL({ size: 64, forceStatic: true }) ??
+            message.author.displayAvatarURL({ size: 64, forceStatic: true });
 
         return channel.send({
             ...(await this.buildMessage(displayName, avatar, message.content, message)),
