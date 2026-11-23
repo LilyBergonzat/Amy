@@ -1,6 +1,5 @@
 import { type Thread, type ThreadMessage, ThreadOpen } from '../../generated/prisma/client.js';
 import {
-    type ComponentInContainer,
     ContainerBuilder,
     FileBuilder,
     type GuildMember,
@@ -12,11 +11,11 @@ import {
     MessageReferenceType,
     type SendableChannels,
     SeparatorBuilder,
+    type SeparatorComponent,
     SeparatorSpacingSize,
-    TextChannel,
     TextDisplayBuilder,
+    type TextDisplayComponent,
     type TopLevelComponent,
-    type Webhook,
 } from 'discord.js';
 import { container } from '@sapphire/framework';
 import {
@@ -26,9 +25,16 @@ import {
     type StickerMedia,
     stickerMedia,
 } from '../utils/discord.js';
-import type { Optional } from '@prisma/client/runtime/client';
 import type { ThreadMessageWithThread } from './ThreadService.js';
 import { ComponentType } from 'discord-api-types/v10';
+import { getEmojiAvatar, replaceEmojis } from '../EmojiService.js';
+
+const COMPONENT_IDS = {
+    DisplayName: 100,
+    Separator: 200,
+    Content: 300,
+    Footer: 400,
+};
 
 export class ThreadPostService {
     private static instance: ThreadPostService;
@@ -42,9 +48,9 @@ export class ThreadPostService {
     }
 
     public async postUserMessage(thread: Thread, message: Message) {
-        const webhook = await this.getThreadWebhook(thread);
+        const channel = await getSendableChannel(thread.idChannel);
 
-        if (!webhook) {
+        if (!channel) {
             return;
         }
 
@@ -53,8 +59,8 @@ export class ThreadPostService {
         }
 
         return message.reference?.type === MessageReferenceType.Forward ?
-                this.postForwardedMessage(webhook, message)
-            :   this.postRegularMessage(webhook, message);
+                this.postForwardedMessage(channel, message)
+            :   this.postRegularMessage(channel, message);
     }
 
     public async postStaffMessage(
@@ -64,9 +70,10 @@ export class ThreadPostService {
         message?: Message,
         anonymousOverride?: boolean,
     ) {
+        const guild = await container.settings.getInboxServer();
         const user = await container.client.users.fetch(thread.idRecipient).catch(() => null);
 
-        if (!user) {
+        if (!guild || !user) {
             return [];
         }
 
@@ -87,6 +94,64 @@ export class ThreadPostService {
         }
 
         const isAnonymous = await container.settings.isAnonymous(anonymousOverride);
+        const avatar = isAnonymous ? guild.iconURL({ size: 64 }) : staff.displayAvatarURL({ size: 64 });
+        const sentMessage = await user.send(await this.buildMessage(displayName, avatar, contents, message));
+        const mirrorMessage = await channel
+            .send(
+                await this.buildMessage(
+                    displayName,
+                    avatar,
+                    contents,
+                    message,
+                    isAnonymous ? `Sent anonymously by **${staff.displayName}**` : undefined,
+                ),
+            )
+            .catch((error) => container.logger.error(error));
+
+        return [sentMessage, mirrorMessage];
+    }
+
+    public async updateThreadMessage(threadMessage: ThreadMessageWithThread, content: string) {
+        if (threadMessage.thread.isOpen !== ThreadOpen.OPEN || threadMessage.internal) {
+            return;
+        }
+
+        if (!threadMessage.idStaff && threadMessage.idTransferredMessage) {
+            await this.updateUserThreadMessage(threadMessage, content);
+        }
+
+        if (threadMessage.idStaff) {
+            await this.updateStaffThreadMessage(threadMessage, content);
+        }
+    }
+
+    public async deleteThreadMessage(threadMessage: ThreadMessageWithThread) {
+        const { thread } = threadMessage;
+
+        if (thread.isOpen !== ThreadOpen.OPEN || threadMessage.internal) {
+            return;
+        }
+
+        const channel = await container.threads.getThreadChannel(thread);
+
+        if (!channel) {
+            return;
+        }
+
+        if (threadMessage.idStaff) {
+            await this.deleteStaffThreadMessage(thread, threadMessage, channel);
+        } else {
+            await this.deleteUserThreadMessage(threadMessage, channel);
+        }
+    }
+
+    private async buildMessage(
+        displayName: string,
+        avatar: string | null,
+        contents: string | null,
+        message?: Message,
+        footer?: string,
+    ): Promise<MessageCreateOptions> {
         const media = message ? [...message.attachments.values()].filter(isGalleryMedia) : [];
         const files = message ? [...message.attachments.values()].filter(isNotGalleryMedia) : [];
         const stickers: StickerMedia[] =
@@ -96,16 +161,12 @@ export class ThreadPostService {
                 )
             :   [];
 
-        const buildData = (footer?: string): MessageCreateOptions => ({
+        const messageContainer = await this.buildMessageContainer(displayName, avatar, contents, footer);
+
+        return {
             flags: MessageFlags.IsComponentsV2,
             components: [
-                new ContainerBuilder()
-                    .addTextDisplayComponents([new TextDisplayBuilder().setContent(`**${displayName}**`)])
-                    .addSeparatorComponents([
-                        new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
-                    ])
-                    .addTextDisplayComponents(contents ? [new TextDisplayBuilder().setContent(contents)] : [])
-                    .addTextDisplayComponents(footer ? [new TextDisplayBuilder().setContent(`-# ${footer}`)] : []),
+                ...(messageContainer ? [messageContainer] : []),
                 ...(media.length > 0 ?
                     [
                         new MediaGalleryBuilder().addItems(
@@ -150,48 +211,47 @@ export class ThreadPostService {
                 })),
                 ...stickers.filter((stickerMedia) => stickerMedia.isConverted).map((stickerMedia) => stickerMedia.file),
             ],
-        });
-
-        const sentMessage = await user.send(buildData());
-        const mirrorMessage = await channel.send(buildData(
-            isAnonymous ? `Sent anonymously by **${staff.displayName}**` : undefined
-        )).catch((error) => container.logger.error(error));
-
-        return [sentMessage, mirrorMessage];
+        };
     }
 
-    public async updateThreadMessage(threadMessage: ThreadMessageWithThread, content: string) {
-        if (threadMessage.thread.isOpen !== ThreadOpen.OPEN || threadMessage.internal) {
-            return;
-        }
+    private async buildMessageContainer(
+        displayName: string,
+        avatar?: string | null,
+        contents?: string | null,
+        footer?: string | null,
+    ) {
+        const emojiAvatar = avatar ? await getEmojiAvatar(avatar) : null;
 
-        if (!threadMessage.idStaff && threadMessage.idTransferredMessage) {
-            await this.updateUserThreadMessage(threadMessage, content);
-        }
-
-        if (threadMessage.idStaff) {
-            await this.updateStaffThreadMessage(threadMessage, content);
-        }
-    }
-
-    public async deleteThreadMessage(threadMessage: ThreadMessageWithThread) {
-        const { thread } = threadMessage;
-
-        if (thread.isOpen !== ThreadOpen.OPEN || threadMessage.internal) {
-            return;
-        }
-
-        const channel = await container.threads.getThreadChannel(thread);
-
-        if (!channel) {
-            return;
-        }
-
-        if (threadMessage.idStaff) {
-            await this.deleteStaffThreadMessage(thread, threadMessage, channel);
-        } else {
-            await this.deleteUserThreadMessage(threadMessage, channel);
-        }
+        return displayName || contents || footer ?
+                new ContainerBuilder()
+                    .addTextDisplayComponents([
+                        new TextDisplayBuilder()
+                            .setContent(`${emojiAvatar ? emojiAvatar.toString() : '👤'}   **${displayName}**`)
+                            .setId(COMPONENT_IDS.DisplayName),
+                    ])
+                    .addSeparatorComponents(
+                        displayName ?
+                            [
+                                new SeparatorBuilder()
+                                    .setDivider(true)
+                                    .setSpacing(SeparatorSpacingSize.Small)
+                                    .setId(COMPONENT_IDS.Separator),
+                            ]
+                        :   [],
+                    )
+                    .addTextDisplayComponents(
+                        contents ?
+                            [
+                                new TextDisplayBuilder()
+                                    .setContent(await replaceEmojis(contents))
+                                    .setId(COMPONENT_IDS.Content),
+                            ]
+                        :   [],
+                    )
+                    .addTextDisplayComponents(
+                        footer ? [new TextDisplayBuilder().setContent(`-# ${footer}`).setId(COMPONENT_IDS.Footer)] : [],
+                    )
+            :   undefined;
     }
 
     private async deleteStaffThreadMessage(thread: Thread, threadMessage: ThreadMessage, channel: SendableChannels) {
@@ -222,14 +282,14 @@ export class ThreadPostService {
     }
 
     private async updateUserThreadMessage(threadMessage: ThreadMessageWithThread, content: string) {
-        const webhook = await this.getThreadWebhook(threadMessage.thread);
-        const message = await webhook?.fetchMessage(threadMessage.idTransferredMessage!).catch(() => null);
+        const channel = await getSendableChannel(threadMessage.thread.idChannel);
+        const message = await channel?.messages.fetch(threadMessage.idTransferredMessage!).catch(() => null);
 
         if (!message) {
             return;
         }
 
-        await webhook?.editMessage(message.id, { content });
+        await message.edit({ components: await this.updateComponents(message.components, content) });
     }
 
     private async updateStaffThreadMessage(threadMessage: ThreadMessageWithThread, contents: string) {
@@ -246,88 +306,53 @@ export class ThreadPostService {
                 await dmChannel?.messages.fetch(threadMessage.idTransferredMessage).catch(() => null)
             :   null;
 
-        const contentsComponent = new TextDisplayBuilder().setContent(contents) as unknown as ComponentInContainer;
-        const updateComponents = (components: TopLevelComponent[]) => {
-            const container = components.find((component) => component.type === ComponentType.Container);
-
-            if (container) {
-                if (container.components.length > 2) {
-                    container.components[2] = contentsComponent;
-                } else {
-                    container.components.push(contentsComponent);
-                }
-            }
-
-            return [...(container ? [container] : []), ...components.slice(1)];
-        };
-
         if (mirrorMessage) {
-            await mirrorMessage.edit({ components: updateComponents(mirrorMessage.components) });
+            await mirrorMessage.edit({ components: await this.updateComponents(mirrorMessage.components, contents) });
         }
 
         if (dmMessage) {
-            await dmMessage.edit({ components: updateComponents(dmMessage.components) });
+            await dmMessage.edit({ components: await this.updateComponents(dmMessage.components, contents) });
         }
     }
 
-    private async getThreadWebhook(thread: Thread) {
-        const channel = await getSendableChannel(thread.idChannel);
-
-        if (!channel) {
-            return;
-        }
-
-        const webhooks = await channel.guild.fetchWebhooks();
-        const webhook = webhooks.find(
-            (webhook) => webhook.channelId === channel.id && webhook.owner?.id === container.client.user!.id,
+    private async updateComponents(components: TopLevelComponent[], contents: string) {
+        const contentsComponent =
+            contents.trim().length > 0 ?
+                new TextDisplayBuilder().setContent(await replaceEmojis(contents)).setId(COMPONENT_IDS.Content)
+            :   null;
+        const container = components.find((component) => component.type === ComponentType.Container);
+        const newContainer = new ContainerBuilder();
+        const displayName = container?.components.find<TextDisplayComponent>(
+            (component): component is TextDisplayComponent => component.id === COMPONENT_IDS.DisplayName,
+        );
+        const separator = container?.components.find<SeparatorComponent>(
+            (component): component is SeparatorComponent => component.id === COMPONENT_IDS.Separator,
+        );
+        const footer = container?.components.find<TextDisplayComponent>(
+            (component): component is TextDisplayComponent => component.id === COMPONENT_IDS.Footer,
         );
 
-        if (webhook) {
-            return webhook;
-        }
+        newContainer.addTextDisplayComponents(displayName ? [displayName.toJSON()] : []);
+        newContainer.addSeparatorComponents(separator ? [separator.toJSON()] : []);
+        newContainer.addTextDisplayComponents(contentsComponent ? [contentsComponent] : []);
+        newContainer.addTextDisplayComponents(footer ? [footer.toJSON()] : []);
 
-        const recipient = await channel.guild.members.fetch(thread.idRecipient);
-
-        if (!recipient) {
-            return;
-        }
-
-        return (channel as TextChannel).createWebhook({
-            name: recipient.displayName,
-            avatar: recipient.displayAvatarURL({ size: 2048 }),
-        });
+        return [...(newContainer.components.length > 0 ? [newContainer] : []), ...components.slice(container ? 1 : 0)];
     }
 
-    private async postRegularMessage(webhook: Webhook, message: Message) {
-        const stickers = (await Promise.all([...message.stickers.values()].map(stickerMedia))).filter(
-            (sticker) => sticker !== null,
-        );
+    private async postRegularMessage(channel: SendableChannels, message: Message) {
+        const guild = await container.settings.getInboxServer();
+        const member = message.member ?? (await guild?.members.fetch(message.author.id).catch(() => null));
+        const displayName = member?.displayName ?? message.author.displayName;
+        const avatar = member?.displayAvatarURL({ size: 64 }) ?? message.author.displayAvatarURL({ size: 64 });
 
-        const messageData: Optional<Message> = Object.assign({}, message);
-
-        delete messageData.nonce;
-
-        return webhook.send({
-            ...messageData,
-            files: [
-                ...message.attachments.values(),
-                ...stickers.map((stickerMedia) =>
-                    stickerMedia.isConverted ?
-                        stickerMedia.file
-                    :   {
-                            name: `${stickerMedia.name}.png`,
-                            attachment: stickerMedia.url,
-                            description: stickerMedia.description,
-                        },
-                ),
-            ],
-            flags: message.flags.bitfield,
-            poll: undefined,
+        return channel.send({
+            ...(await this.buildMessage(displayName, avatar, message.content, message)),
             allowedMentions: { parse: [] },
         });
     }
 
-    private async postForwardedMessage(webhook: Webhook, message: Message) {
-        return message.forward(webhook.channel as TextChannel);
+    private async postForwardedMessage(channel: SendableChannels, message: Message) {
+        return message.forward(channel);
     }
 }

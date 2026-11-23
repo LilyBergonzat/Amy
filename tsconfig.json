@@ -6,7 +6,7 @@
         "@sapphire/ts-config/verbatim"
     ],
     "compilerOptions": {
-        "target": "ES2024",
+        "target": "esnext",
         "module": "NodeNext",
         "moduleResolution": "NodeNext",
         "removeComments": true,
@@ -16,7 +16,7 @@
         "outDir": "./dist",
         "tsBuildInfoFile": "./dist/.tsbuildinfo",
         "skipLibCheck": true,
-        "lib": ["DOM"],
+        "lib": ["ESNext", "DOM"],
         "jsx": "react-jsx",
         "jsxImportSource": "hono/jsx"
     },

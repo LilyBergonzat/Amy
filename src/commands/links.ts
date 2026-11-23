@@ -26,9 +26,8 @@ export class LinksCommand extends Command {
 
     public override async chatInputRun(interaction: ChatInputCommandInteraction) {
         await interaction.reply({ content: 'Searching...', flags: MessageFlags.Ephemeral });
-        await this.execute(
-            interaction.options.getUser('user', true),
-            (content: string) => interaction.followUp(content)
+        await this.execute(interaction.options.getUser('user', true), (content: string) =>
+            interaction.followUp(content),
         );
         await interaction.editReply('Done.');
     }
@@ -47,7 +46,7 @@ export class LinksCommand extends Command {
     }
 
     private async execute(user: User, reply: (reply: string) => Promise<Message>) {
-        let threads = await this.container.threads.getThreads(user);
+        const threads = await this.container.threads.getThreads(user);
 
         if (threads.length < 1) {
             await reply(`There are no past threads with this user.`);
@@ -60,7 +59,7 @@ export class LinksCommand extends Command {
         while (threads.length > 0) {
             let thread;
 
-            while (thread = threads.shift()) {
+            while ((thread = threads.shift())) {
                 const link = `- <${new WebService().url(`/thread/${thread.id}`)}>`;
 
                 if (message.length + link.length + 1 > 2000) {

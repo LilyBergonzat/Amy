@@ -138,3 +138,15 @@ model SnippetAlias {
     @@unique([idSnippet, isPrimary])
     @@map("snippet_alias")
 }
+
+model Emoji {
+    id         String
+    idOriginal String
+    avatarHash String?
+    lastUsed   DateTime @default(now())
+
+    @@id(id)
+    @@unique([idOriginal])
+    @@unique([avatarHash])
+    @@map("emoji")
+}

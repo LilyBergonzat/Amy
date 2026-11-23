@@ -11,9 +11,10 @@ export class ClientReadyListener extends Listener {
     public override async run() {
         const { client } = this.container;
 
-        this.container.logger.info(`Logged in as ${client.user!.tag} (${client.user!.id})`);
-
         await catchUp();
         new ScheduledCloseService().start();
+        await this.container.client.application?.emojis.fetch();
+
+        this.container.logger.info(`Logged in as ${client.user!.tag} (${client.user!.id})`);
     }
 }
